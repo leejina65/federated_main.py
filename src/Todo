@@ -1,0 +1,22 @@
+federated_main.py
+FD: model return self.softmax // F.log_softmax(x, dim=1) // out = self.fc(out)
+-> 결과값까지
+Sagnet: model
+->
+
+2. args.model 이랑 global model이랑
+
+2. sag_resnet parameters matching ::
+    elif args.dataset == 'Pacs':
+        global_model = sag_resnet(args=args)
+
+
+same term [Sag:Feder]
+
+=========================완료==================
+1. get_dataset --> 무슨 데이터 셋 train,test, user_groups
+1.1 utils
+1.2 sampling
+pacs_noniid 수정 아직
+SAGNET->데이터만 가져오는게 아니라 트레이닝까지 같은 함수에서 실행함
+페더레이트->데이터 가져오는 함수 따로.. 로더 따로
