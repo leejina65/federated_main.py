@@ -6,27 +6,33 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from utils_sag import *
+import options
+from PIL import Image
 import time
+import numpy as np
 class DatasetSplit(Dataset):
     """An abstract Dataset class wrapped around Pytorch Dataset class.
     """
-
     def __init__(self, dataset, idxs):
-        self.dataset = dataset
+        self.dataset = [sample for dataset in dataset for sample in dataset.samples]
         a_ind = [int(j) for i in idxs for j in (i if isinstance(i, tuple) else (i,))]
-
-        self.idxs = a_ind
+        self.idxs=a_ind
+        self.args = options.args_parser()
+        self.root = self.args.dataset_dir
         #self.idxs = [int(i) for i in idxs]
 
     def __len__(self):
         return len(self.idxs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item):  #domain 0,1,2 중 특정 지정해야 함 -> generator input을 애초에 domain 지정
         image, label = self.dataset[self.idxs[item]]
-        return torch.tensor(image), torch.tensor(label)
+        path=self.root+'/pacs/images/kfold/'+image
+        img=Image.open(path).convert('RGB')
+        img_array=np.array(img)
+        return torch.tensor(img_array), torch.tensor(label)
 
 
-class LocalUpdate(object):
+class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[idx], logger=logger,opti=opti_dic, status = status)
     def __init__(self, args, dataset, idxs, logger, opti, status):
         self.args = args
         self.status = status
@@ -42,10 +48,8 @@ class LocalUpdate(object):
         self.optimizer_style = opti['optimizer_style']
         self.optimizer_adv = opti['optimizer_adv']
 
-
         self.logger = logger
-        self.trainloader, self.validloader, self.testloader = self.train_val_test(
-            dataset, list(idxs))
+        self.trainloader, self.validloader, self.testloader = self.train_val_test(dataset, list(idxs))
         self.device = 'cuda' if args.gpu else 'cpu'
         # Default criterion set to NLL loss function
         self.criterion = nn.NLLLoss().to(self.device)
@@ -60,6 +64,7 @@ class LocalUpdate(object):
         idxs_val = idxs[int(0.8*len(idxs)):int(0.9*len(idxs))]
         idxs_test = idxs[int(0.9*len(idxs)):]
 
+        #loader for per clinet
         trainloader = DataLoader(DatasetSplit(dataset, idxs_train),
                                  batch_size=self.args.local_bs, shuffle=True)
         validloader = DataLoader(DatasetSplit(dataset, idxs_val),
@@ -68,44 +73,7 @@ class LocalUpdate(object):
                                 batch_size=1, shuffle=False) #int(len(idxs_test)/10)
         return trainloader, validloader, testloader
 
-    def update_weights(self, model, global_round, step, loader_srcs):
-        # Set mode to train model
-        epoch_loss = []
-
-        # Set optimizer for the local updates
-        if self.args.optimizer == 'sgd':
-            optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,
-                                        momentum=0.5)
-        elif self.args.optimizer == 'adam':
-            optimizer = torch.optim.Adam(model.parameters(), lr=self.args.lr,
-                                         weight_decay=1e-4)
-
-        for iter in range(self.args.local_ep):
-            batch_loss = []
-            #idx_sagnet(model,iter)
-            for batch_idx, (images, labels) in enumerate(self.trainloader):
-                images, labels = images.to(self.device), labels.to(self.device)
-
-                model.zero_grad()
-                log_probs = model(images)
-                loss = self.criterion(log_probs, labels)
-                loss.backward()
-                optimizer.step()
-
-                if self.args.verbose and (batch_idx % 10 == 0):
-                    print('| Global Round : {} | Local Epoch : {} | [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                        global_round, iter, batch_idx * len(images),
-                        len(self.trainloader.dataset),
-                        100. * batch_idx / len(self.trainloader), loss.item()))
-                self.logger.add_scalar('loss', loss.item())
-                batch_loss.append(loss.item())
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
-
-        return model.state_dict(), sum(epoch_loss) / len(epoch_loss)
-
-        #return model.state_dict()
-
-    def idx_sagnet(self,model,step):
+    def idx_sagnet(self, model, step, images, labels):
         global dataiter_srcs
         model.train()
         self.scheduler.step()
@@ -117,25 +85,29 @@ class LocalUpdate(object):
         ## Load data
         tic = time.time()
 
-        n_srcs = len(self.args.sources)
-        if step == 0:
-            dataiter_srcs = [None] * n_srcs
-        data = []
-        label = []
-
-        for i in range(n_srcs):
-            if step % len(loader_srcs[i]) == 0:
-                dataiter_srcs[i] = iter(loader_srcs[i])
-            temp_data, temp_label = next(dataiter_srcs[i])
-            data.append(temp_data)
-            label.append(temp_label)
-
-        if data:  # 리스트가 비어있지 않은 경우에만 연산 진행
-            data = torch.cat(data)
-            label = torch.cat(label)
-            rand_idx = torch.randperm(len(data))
-            data = data[rand_idx]
-            label = label[rand_idx].cuda()
+        # n_srcs = len(self.args.sources)
+        # if step == 0:
+        #     dataiter_srcs = [None] * n_srcs
+        # data,label = [],[]
+        #
+        # for i in range(n_srcs):
+        #     if step % len(loader_srcs[i]) == 0:
+        #         dataiter_srcs[i] = iter(loader_srcs[i])
+        #     temp_data, temp_label = next(dataiter_srcs[i])
+        #     data.append(temp_data)
+        #     label.append(temp_label)
+        #
+        # if data:  # 리스트가 비어있지 않은 경우에만 연산 진행
+        #     data = torch.cat(data)
+        #     label = torch.cat(label)
+        #     rand_idx = torch.randperm(len(data))
+        #     data = data[rand_idx]
+        #     label = label[rand_idx].cuda()
+        data = images
+        label = labels
+        rand_idx = torch.randperm(len(data))
+        data = data[rand_idx]
+        label = label[rand_idx].cuda()
 
         time_data = time.time() - tic
 
@@ -185,6 +157,43 @@ class LocalUpdate(object):
                 step, self.args.iterations, 100. * step / self.args.iterations, self.status['lr'],
                 ', '.join(['{} {}'.format(k, v) for k, v in self.status['src'].items()])))
 
+    def update_weights(self, model, global_round, step, loader_srcs):
+        # Set mode to train model
+        epoch_loss = []
+
+        # Set optimizer for the local updates
+        if self.args.optimizer == 'sgd':
+            optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,
+                                        momentum=0.5)
+        elif self.args.optimizer == 'adam':
+            optimizer = torch.optim.Adam(model.parameters(), lr=self.args.lr,
+                                         weight_decay=1e-4)
+
+        for iter in range(self.args.local_ep):
+            batch_loss = []
+            #idx_sagnet(model,iter)
+            for batch_idx, (images, labels) in enumerate(self.trainloader):
+                images, labels = images.to(self.device), labels.to(self.device)
+                self.idx_sagnet(model, iter, images, labels)
+
+                model.zero_grad()
+                log_probs = model(images)
+                loss = self.criterion(log_probs, labels)
+                loss.backward()
+                optimizer.step()
+
+                if self.args.verbose and (batch_idx % 10 == 0):
+                    print('| Global Round : {} | Local Epoch : {} | [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                        global_round, iter, batch_idx * len(images),
+                        len(self.trainloader.dataset),
+                        100. * batch_idx / len(self.trainloader), loss.item()))
+                self.logger.add_scalar('loss', loss.item())
+                batch_loss.append(loss.item())
+            epoch_loss.append(sum(batch_loss)/len(batch_loss))
+
+        return model.state_dict(), sum(epoch_loss) / len(epoch_loss)
+
+        #return model.state_dict()
 
     def inference(self, model):
         """ Returns the inference accuracy and loss.

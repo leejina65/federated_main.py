@@ -109,7 +109,7 @@ def init_optimizer(model):
                        ,('criterion_adv',criterion_adv)])
     return dic
 
-def train_sag(model,step):
+def train_sag(model,step,data):
     global dataiter_srcs
 
     ## Initialize iteration
@@ -124,7 +124,8 @@ def train_sag(model,step):
     ## Load data
     tic = time.time() #fd: start_time
 
-    n_srcs = len(args.sources)
+    #split DATA,LABEL to use for training
+    n_srcs = len(args.sources) #art_painting, ...
     if step == 0:
         dataiter_srcs = [None] * n_srcs
     data = [None] * n_srcs
@@ -278,8 +279,8 @@ if __name__ == '__main__':
         idxs_users = np.random.choice(range(args.num_users), m, replace=False) #select randomly clients
 
         for idx in idxs_users:
-            local_model = LocalUpdate(args=args, dataset=train_dataset,opti=opti_dic, status = status,
-                                      idxs=user_groups[idx], logger=logger)
+            local_model = LocalUpdate(args=args, dataset=train_dataset,idxs=user_groups[idx],
+                                      logger=logger,opti=opti_dic, status = status)
             w, loss,_ = local_model.update_weights(model=copy.deepcopy(global_model), global_round=epoch,step=idx,loader_srcs=loader_srcs)
             local_weights.append(copy.deepcopy(w))
             local_losses.append(copy.deepcopy(loss))
