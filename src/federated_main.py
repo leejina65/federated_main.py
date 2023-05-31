@@ -13,6 +13,7 @@ from tensorboardX import SummaryWriter
 from torchvision import transforms
 from options import args_parser #parameters import
 from update import LocalUpdate, test_inference
+from utils import pacs_noniid, pacs_iid
 
 #from models import MLP, ResNet
 from collections import OrderedDict
@@ -21,13 +22,12 @@ from utils import get_dataset, average_weights, exp_details
 from loss_sag import *
 from utils_sag import *
 
-def init_loader(train_dataset, val_dataset,test_dataset):
+def init_loader(): #train_dataset, val_dataset,test_dataset):
     global loader_srcs, loader_vals, loader_tgts
     global num_classes
 
     # Set transforms
     stats = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-
     trans_list = []
     trans_list.append(transforms.RandomResizedCrop(args.crop_size, scale=(0.5, 1)))
     if args.colorjitter:
@@ -43,29 +43,80 @@ def init_loader(train_dataset, val_dataset,test_dataset):
         transforms.ToTensor(),
         transforms.Normalize(*stats)])
 
-    # Set loaders
-    kwargs = {'num_workers': args.workers, 'pin_memory': True}
-    loader_srcs = [torch.utils.data.DataLoader(
-        dataset,
-        batch_size=args.local_bs,
-        shuffle=True,
-        drop_last=True,
-        **kwargs)
-        for dataset in train_dataset]
-    loader_vals = [torch.utils.data.DataLoader(
-        dataset,
-        batch_size=int(args.local_bs * 4),
-        shuffle=False,
-        drop_last=False,
-        **kwargs)
-        for dataset in val_dataset]
-    loader_tgts = [torch.utils.data.DataLoader(
-        dataset_tgt,
-        batch_size=int(args.local_bs * 4),
-        shuffle=False,
-        drop_last=False,
-        **kwargs)
-        for dataset_tgt in test_dataset]
+    if args.dataset=='pacs':
+        args.dataset == 'pacs'
+        all_domains = ['art_painting', 'cartoon', 'sketch', 'photo']
+        if args.sources[0] == 'Rest':  # (3,1)
+            args.sources = [d for d in all_domains if d not in args.targets]
+        if args.targets[0] == 'Rest':  # (1,3)
+            args.targets = [d for d in all_domains if d not in args.sources]
+
+        from data.pacs import PACS
+        image_dir = os.path.join(args.dataset_dir, args.dataset, 'images', 'kfold')
+        split_dir = os.path.join(args.dataset_dir, args.dataset, 'splits')
+
+        print('--- Training ---')
+        dataset_srcs = [PACS(image_dir,
+                             split_dir,
+                             domain=domain,
+                             split='train',
+                             transform=train_transform)
+                        for domain in args.sources]
+
+        trClssnum = [PACS(image_dir,
+                          split_dir,
+                          domain=domain,
+                          split='train',
+                          transform=train_transform).__len__() for domain in args.sources]
+
+        print('--- Validation ---')
+        dataset_vals = [PACS(image_dir,
+                             split_dir,
+                             domain=domain,
+                             split='crossval',
+                             transform=test_transform)
+                        for domain in args.sources]
+        print('--- Test ---')
+        dataset_tgts = [PACS(image_dir,
+                             split_dir,
+                             domain=domain,
+                             split='test',
+                             transform=test_transform)
+                        for domain in args.targets]
+        num_classes = 7
+
+        if args.iid:
+            # Sample IID user data from Mnist
+            user_groups = pacs_iid(dataset_srcs, trClssnum, args.num_users)
+        else:
+            # Sample Non-IID user data from Mnist
+            user_groups = pacs_noniid(dataset_srcs, args.num_users)
+
+        return dataset_srcs, dataset_vals, dataset_tgts, user_groups
+
+    # # Set loaders
+    # kwargs = {'num_workers': args.workers, 'pin_memory': True}
+    # loader_srcs = [torch.utils.data.DataLoader(
+    #     dataset,
+    #     batch_size=args.local_bs,
+    #     shuffle=True,
+    #     drop_last=True,
+    #     **kwargs)
+    #     for dataset in dataset_srcs]
+    # loader_vals = [torch.utils.data.DataLoader(
+    #     dataset,
+    #     batch_size=int(args.local_bs * 4),
+    #     shuffle=False,
+    #     drop_last=False,
+    #     **kwargs)
+    #     for dataset in dataset_vals]
+    # loader_tgts = [torch.utils.data.DataLoader(
+    #     dataset_tgt,
+    #     batch_size=int(args.local_bs * 4),
+    #     shuffle=False,
+    #     drop_last=False,
+    #     **kwargs)
+    #     for dataset_tgt in dataset_tgts]
 
 def init_optimizer(model):
     global optimizer, optimizer_style, optimizer_adv
@@ -206,34 +257,28 @@ if __name__ == '__main__':
         torch.cuda.set_device(args.gpu)
     device = 'cuda' if not args.gpu else 'cpu'
 
-    # load dataset and user groups
-    train_dataset, val_dataset,test_dataset, user_groups = get_dataset(args)
-
     # BUILD MODEL
     if args.dataset == 'pacs':
-        model= sag_resnet(depth=int(args.depth),
+        global_model= sag_resnet(depth=int(args.depth),
                    pretrained=not args.from_sketch,
                    num_classes=args.num_classes,
                    drop=args.drop,
                    sagnet=args.sagnet,
                    style_stage=args.style_stage)
-        #model = torch.nn.DataParallel(model).cuda()
-        global_model=model.to(device)
+        global_model=global_model.to(device)
     else:
         exit('Error: unrecognized model')
 
     # Initialzie loader
     print('\nInitialize loaders...from SagNet')
-    init_loader(train_dataset, val_dataset,test_dataset)
+    dataset_srcs, dataset_vals, dataset_tgts, user_groups = init_loader()
 
     # Sagnet Initialize optimizer
     print('\nInitialize optimizers... from SagNet')
     opti_dic = init_optimizer(global_model)
+    global_model.train()
+    print(global_model)
 
-    # Set the model to train and send it to device.
-    #global_model.to(device)
-
-    #global_model.train() #training layers switch on # training
     #Sagnet Training Process#
     # Initialize status
     src_keys = ['t_data', 't_net', 'l_c', 'l_s', 'l_adv', 'acc']
@@ -250,15 +295,6 @@ if __name__ == '__main__':
     # Main loop 랜덤하게 초기화한 모델을 나눠주고 각자 학습시키고.. .. ..!!
     # 초기 모델 client에게 뿌리는 부분
     # 합친 global모델의 성능과 그 전의 성능을 비교
-
-    #Sagnet구조
-    '''
-    print('\nStart training...')
-    results = []
-    for step in range(args.iterations):
-        train_sag(global_model,step) #
-        '''
-    #여기까지
 
     # copy weights
     global_weights = global_model.state_dict()
@@ -277,11 +313,11 @@ if __name__ == '__main__':
         global_model.train()
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False) #select randomly clients
-
+        #dataset_srcs, dataset_vals, dataset_tgts, user_groups
         for idx in idxs_users:
-            local_model = LocalUpdate(args=args, dataset=train_dataset,idxs=user_groups[idx],
+            local_model = LocalUpdate(args=args, dataset=dataset_srcs,idxs=user_groups[idx],
                                       logger=logger,opti=opti_dic, status = status)
-            w, loss,_ = local_model.update_weights(model=copy.deepcopy(global_model), global_round=epoch,step=idx,loader_srcs=loader_srcs)
+            w, loss = local_model.update_weights(model=copy.deepcopy(global_model), global_round=epoch)
             local_weights.append(copy.deepcopy(w))
             local_losses.append(copy.deepcopy(loss))
 
@@ -298,8 +334,8 @@ if __name__ == '__main__':
         list_acc, list_loss = [], []
         global_model.eval()
         for c in range(args.num_users):
-            local_model = LocalUpdate(args=args, dataset=train_dataset,opti = opti_dic,
-                                      idxs=user_groups[idx], logger=logger)
+            local_model = LocalUpdate(args=args, dataset=dataset_srcs,idxs=user_groups[idx],
+                                      logger=logger,opti=opti_dic, status = status)
             acc, loss = local_model.inference(model=global_model)
             list_acc.append(acc)
             list_loss.append(loss)
@@ -312,7 +348,7 @@ if __name__ == '__main__':
             print('Train Accuracy: {:.2f}% \n'.format(100*train_accuracy[-1]))
 
     # Test inference after completion of training
-    test_acc, test_loss = test_inference(args, global_model, test_dataset)
+    test_acc, test_loss = test_inference(args, global_model, dataset_tgts)
 
     print(f' \n Results after {args.epochs} global rounds of training:')
     print("|---- Avg Train Accuracy: {:.2f}%".format(100*train_accuracy[-1]))

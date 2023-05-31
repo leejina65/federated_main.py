@@ -13,7 +13,7 @@ def args_parser():
                         help="number of users: K")
     parser.add_argument('--frac', type=float, default=0.2,
                         help='the fraction of clients: C')
-    parser.add_argument('--local_ep', type=int, default=10,
+    parser.add_argument('--local_ep', type=int, default=5,
                         help="the number of local epochs: E")
     parser.add_argument('--local_bs', type=int, default=32,
                         help="local batch size: B") #FD=10 sagnet=32
@@ -58,7 +58,7 @@ def args_parser():
     parser.add_argument('--seed', type=int, default=1, help='random seed')
 
 
-    parser.add_argument('--dataset-dir', type=str, default='C:/Users/BamiDeep1/Desktop/FLEG0420/minidataset',
+    parser.add_argument('--dataset-dir', type=str, default='C:/Users/BamiDeep1/Desktop/FLEG0420/dataset',
                         help='Sagnet:: home directory to dataset')
     parser.add_argument('--dataset', type=str, default='pacs',
                         help="Sagnet::dataset name")

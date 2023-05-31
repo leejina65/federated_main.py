@@ -7,9 +7,12 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from utils_sag import *
 import options
+from options import args_parser
 from PIL import Image
+import cv2
 import time
 import numpy as np
+from torchvision import transforms
 class DatasetSplit(Dataset):
     """An abstract Dataset class wrapped around Pytorch Dataset class.
     """
@@ -17,22 +20,23 @@ class DatasetSplit(Dataset):
         self.dataset = [sample for dataset in dataset for sample in dataset.samples]
         a_ind = [int(j) for i in idxs for j in (i if isinstance(i, tuple) else (i,))]
         self.idxs=a_ind
-        self.args = options.args_parser()
-        self.root = self.args.dataset_dir
-        #self.idxs = [int(i) for i in idxs]
+#        self.args = options.args_parser()
+#        self.root = self.args.dataset_dir
+#        self.idxs = [int(i) for i in idxs]
 
     def __len__(self):
         return len(self.idxs)
 
     def __getitem__(self, item):  #domain 0,1,2 중 특정 지정해야 함 -> generator input을 애초에 domain 지정
         image, label = self.dataset[self.idxs[item]]
-        path=self.root+'/pacs/images/kfold/'+image
-        img=Image.open(path).convert('RGB')
-        img_array=np.array(img)
-        return torch.tensor(img_array), torch.tensor(label)
+        return image, label
+        # path=self.root+'/pacs/images/kfold/'+image
+        # img=Image.open(path).convert('RGB')
+        # img_array=np.array(img)
+        # return torch.tensor(img_array), torch.tensor(label)
 
 
-class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[idx], logger=logger,opti=opti_dic, status = status)
+class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
     def __init__(self, args, dataset, idxs, logger, opti, status):
         self.args = args
         self.status = status
@@ -52,7 +56,6 @@ class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[i
         self.trainloader, self.validloader, self.testloader = self.train_val_test(dataset, list(idxs))
         self.device = 'cuda' if args.gpu else 'cpu'
         # Default criterion set to NLL loss function
-        self.criterion = nn.NLLLoss().to(self.device)
 
     def train_val_test(self, dataset, idxs):
         """
@@ -73,9 +76,26 @@ class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[i
                                 batch_size=1, shuffle=False) #int(len(idxs_test)/10)
         return trainloader, validloader, testloader
 
-    def idx_sagnet(self, model, step, images, labels):
-        global dataiter_srcs
-        model.train()
+    def idx_sagnet(self, model, step, images,labels, optimizer):
+        args = args_parser()
+        criterion = torch.nn.CrossEntropyLoss()
+
+        stats = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        trans_list = []
+        trans_list.append(transforms.RandomResizedCrop(args.crop_size, scale=(0.5, 1)))
+        if args.colorjitter:
+            trans_list.append(transforms.ColorJitter(*[args.colorjitter] * 4))
+        trans_list.append(transforms.RandomHorizontalFlip())
+        trans_list.append(transforms.ToTensor())
+        trans_list.append(transforms.Normalize(*stats))
+        train_transform = transforms.Compose(trans_list)
+
+        test_transform = transforms.Compose([
+            transforms.Resize(args.input_size),
+            transforms.CenterCrop(args.crop_size),
+            transforms.ToTensor(),
+            transforms.Normalize(*stats)])
+
         self.scheduler.step()
 
         if self.args.sagnet:
@@ -85,27 +105,18 @@ class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[i
         ## Load data
         tic = time.time()
 
-        # n_srcs = len(self.args.sources)
-        # if step == 0:
-        #     dataiter_srcs = [None] * n_srcs
-        # data,label = [],[]
-        #
-        # for i in range(n_srcs):
-        #     if step % len(loader_srcs[i]) == 0:
-        #         dataiter_srcs[i] = iter(loader_srcs[i])
-        #     temp_data, temp_label = next(dataiter_srcs[i])
-        #     data.append(temp_data)
-        #     label.append(temp_label)
-        #
-        # if data:  # 리스트가 비어있지 않은 경우에만 연산 진행
-        #     data = torch.cat(data)
-        #     label = torch.cat(label)
-        #     rand_idx = torch.randperm(len(data))
-        #     data = data[rand_idx]
-        #     label = label[rand_idx].cuda()
-        data = images
-        label = labels
+        self.args = options.args_parser()
+        data=images
+        label=labels
+
+        root=self.args.dataset_dir+'/pacs/images/kfold/'
+        imgroot=[root+data[i] for i in range(len(data))]
+        img=[Image.open(img).convert("RGB") for img in imgroot]
+        data=[train_transform(img) for img in img]
+        data=torch.stack(data)
+
         rand_idx = torch.randperm(len(data))
+
         data = data[rand_idx]
         label = label[rand_idx].cuda()
 
@@ -133,14 +144,18 @@ class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[i
             self.optimizer_adv.step()
 
         # learn content
-        loss = self.criterion(y, label)
+        loss = criterion(y, label)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         time_net = time.time() - tic
 
-        ## Update status
+        self.logger.add_scalar('loss', loss.item())
+        acc=compute_accuracy(y, label)
+
+
+    ## Update status
         self.status['iteration'] = step + 1
         self.status['lr'] = optimizer.param_groups[0]['lr']
         self.status['src']['t_data'].update(time_data)
@@ -149,51 +164,38 @@ class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[i
         if self.args.sagnet:
             self.status['src']['l_s'].update(loss_style.item())
             self.status['src']['l_adv'].update(loss_adv.item())
-        self.status['src']['acc'].update(compute_accuracy(y, label))
+        self.status['src']['acc'].update(acc)
 
         ## Log result
-        if step % self.args.log_interval == 0:
-            print('[{}/{} ({:.0f}%)] lr {:.5f}, {}'.format(
-                step, self.args.iterations, 100. * step / self.args.iterations, self.status['lr'],
-                ', '.join(['{} {}'.format(k, v) for k, v in self.status['src'].items()])))
+        # if step % self.args.log_interval == 0:
+        print('[{}/{} ({:.0f}%)] lr {:.5f}, {}'.format(
+            step, self.args.iterations, 100. * step / self.args.iterations, self.status['lr'],
+            ', '.join(['{} {}'.format(k, v) for k, v in self.status['src'].items()])))
+        return loss_style,loss_adv,loss,y
 
-    def update_weights(self, model, global_round, step, loader_srcs):
+    def update_weights(self, model, global_round): #, step, loader_srcs):
         # Set mode to train model
+        model.train()
         epoch_loss = []
 
-        # Set optimizer for the local updates
-        if self.args.optimizer == 'sgd':
-            optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,
-                                        momentum=0.5)
-        elif self.args.optimizer == 'adam':
-            optimizer = torch.optim.Adam(model.parameters(), lr=self.args.lr,
-                                         weight_decay=1e-4)
+        optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,momentum=0.5)
 
         for iter in range(self.args.local_ep):
             batch_loss = []
-            #idx_sagnet(model,iter)
             for batch_idx, (images, labels) in enumerate(self.trainloader):
-                images, labels = images.to(self.device), labels.to(self.device)
-                self.idx_sagnet(model, iter, images, labels)
-
                 model.zero_grad()
-                log_probs = model(images)
-                loss = self.criterion(log_probs, labels)
-                loss.backward()
-                optimizer.step()
+                loss_style,loss_adv,loss,y_ = self.idx_sagnet(model, iter, images,labels, optimizer)
+                batch_loss.append(loss.item())
 
                 if self.args.verbose and (batch_idx % 10 == 0):
                     print('| Global Round : {} | Local Epoch : {} | [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                         global_round, iter, batch_idx * len(images),
                         len(self.trainloader.dataset),
                         100. * batch_idx / len(self.trainloader), loss.item()))
-                self.logger.add_scalar('loss', loss.item())
-                batch_loss.append(loss.item())
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
+            epoch_loss.append(sum(batch_loss) / len(batch_loss))
 
         return model.state_dict(), sum(epoch_loss) / len(epoch_loss)
 
-        #return model.state_dict()
 
     def inference(self, model):
         """ Returns the inference accuracy and loss.
@@ -201,13 +203,16 @@ class LocalUpdate(object): #(args=args, dataset=train_dataset,idxs=user_groups[i
 
         model.eval()
         loss, total, correct = 0.0, 0.0, 0.0
+        if self.args.optimizer == 'sgd':
+            optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,
+                                        momentum=0.5)
+        elif self.args.optimizer == 'adam':
+            optimizer = torch.optim.Adam(model.parameters(), lr=self.args.lr,
+                                         weight_decay=1e-4)
+
 
         for batch_idx, (images, labels) in enumerate(self.testloader):
-            images, labels = images.to(self.device), labels.to(self.device)
-
-            # Inference
-            outputs = model(images)
-            batch_loss = self.criterion(outputs, labels)
+            batch_loss,outputs = self.idx_sagnet(model, iter, images, labels, optimizer)
             loss += batch_loss.item()
 
             # Prediction
