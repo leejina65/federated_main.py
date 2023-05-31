@@ -167,10 +167,10 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         self.status['src']['acc'].update(acc)
 
         ## Log result
-        # if step % self.args.log_interval == 0:
-        print('[{}/{} ({:.0f}%)] lr {:.5f}, {}'.format(
-            step, self.args.iterations, 100. * step / self.args.iterations, self.status['lr'],
-            ', '.join(['{} {}'.format(k, v) for k, v in self.status['src'].items()])))
+        if step % self.args.log_interval == 0:
+            print('[{}/{} ({:.0f}%)] lr {:.5f}, {}'.format(
+                step, self.args.iterations, 100. * step / self.args.iterations, self.status['lr'],
+                ', '.join(['{} {}'.format(k, v) for k, v in self.status['src'].items()])))
         return loss_style,loss_adv,loss,y
 
     def update_weights(self, model, global_round): #, step, loader_srcs):
@@ -193,6 +193,7 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                         len(self.trainloader.dataset),
                         100. * batch_idx / len(self.trainloader), loss.item()))
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
+        print(batch_loss)
 
         return model.state_dict(), sum(epoch_loss) / len(epoch_loss)
 

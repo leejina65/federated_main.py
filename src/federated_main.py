@@ -291,11 +291,6 @@ if __name__ == '__main__':
         ('test_acc', OrderedDict([(domain, 0) for domain in args.targets])),
         ('mean_test_acc', 0),
     ])
-
-    # Main loop 랜덤하게 초기화한 모델을 나눠주고 각자 학습시키고.. .. ..!!
-    # 초기 모델 client에게 뿌리는 부분
-    # 합친 global모델의 성능과 그 전의 성능을 비교
-
     # copy weights
     global_weights = global_model.state_dict()
 
@@ -312,14 +307,17 @@ if __name__ == '__main__':
 
         global_model.train()
         m = max(int(args.frac * args.num_users), 1)
-        idxs_users = np.random.choice(range(args.num_users), m, replace=False) #select randomly clients
-        #dataset_srcs, dataset_vals, dataset_tgts, user_groups
+        idxs_users = np.random.choice(range(args.num_users), m, replace=False)
+
         for idx in idxs_users:
-            local_model = LocalUpdate(args=args, dataset=dataset_srcs,idxs=user_groups[idx],
-                                      logger=logger,opti=opti_dic, status = status)
-            w, loss = local_model.update_weights(model=copy.deepcopy(global_model), global_round=epoch)
+            local_model = LocalUpdate(args=args, dataset=dataset_srcs,
+                                      idxs=user_groups[idx],logger=logger,
+                                      opti=opti_dic, status = copy.deepcopy(status))
+            w, loss = local_model.update_weights(
+                model=copy.deepcopy(global_model), global_round=epoch)
             local_weights.append(copy.deepcopy(w))
             local_losses.append(copy.deepcopy(loss))
+            print('='*50,"CLIENT:",idx,"IS DONE",'='*50)
 
         # update global weights
         global_weights = average_weights(local_weights)
