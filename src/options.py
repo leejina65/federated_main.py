@@ -7,19 +7,19 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # federated arguments (Notation for the arguments followed from paper)
-    parser.add_argument('--epochs', type=int, default=10,
+    parser.add_argument('--epochs', type=int, default=200, #10->50
                         help="number of rounds of training")
-    parser.add_argument('--num_users', type=int, default=10,
+    parser.add_argument('--num_users', type=int, default=30,
                         help="number of users: K")
-    parser.add_argument('--frac', type=float, default=0.2,
+    parser.add_argument('--frac', type=float, default=0.6,
                         help='the fraction of clients: C')
     parser.add_argument('--local_ep', type=int, default=5,
                         help="the number of local epochs: E")
-    parser.add_argument('--local_bs', type=int, default=32,
+    parser.add_argument('--local_bs', type=int, default=16,
                         help="local batch size: B") #FD=10 sagnet=32
-    parser.add_argument('--lr', type=float, default=0.01,
+    parser.add_argument('--lr', type=float, default=0.001, #0.01 ->0.001
                         help='learning rate') #sagnet=0.04
-    parser.add_argument('--momentum', type=float, default=0.5,
+    parser.add_argument('--momentum', type=float, default=0.9,
                         help='SGD momentum (default: 0.5)') #sagnet=0.9
 
     # model arguments
@@ -115,8 +115,8 @@ def args_parser():
                         help='iterations for logging training status')
     parser.add_argument('--log-test-interval', type=int, default=10,
                         help='iterations for logging test status')
-    parser.add_argument('--test-interval', type=int, default=100,
-                        help='iterations for test')
+    # parser.add_argument('--test-interval', type=int, default=args.local_ep,
+    #                     help='iterations for test')
 
     args = parser.parse_args()
     return args

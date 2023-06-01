@@ -94,30 +94,6 @@ def init_loader(): #train_dataset, val_dataset,test_dataset):
 
         return dataset_srcs, dataset_vals, dataset_tgts, user_groups
 
-    # # Set loaders
-    # kwargs = {'num_workers': args.workers, 'pin_memory': True}
-    # loader_srcs = [torch.utils.data.DataLoader(
-    #     dataset,
-    #     batch_size=args.local_bs,
-    #     shuffle=True,
-    #     drop_last=True,
-    #     **kwargs)
-    #     for dataset in dataset_srcs]
-    # loader_vals = [torch.utils.data.DataLoader(
-    #     dataset,
-    #     batch_size=int(args.local_bs * 4),
-    #     shuffle=False,
-    #     drop_last=False,
-    #     **kwargs)
-    #     for dataset in dataset_vals]
-    # loader_tgts = [torch.utils.data.DataLoader(
-    #     dataset_tgt,
-    #     batch_size=int(args.local_bs * 4),
-    #     shuffle=False,
-    #     drop_last=False,
-    #     **kwargs)
-    #     for dataset_tgt in dataset_tgts]
-
 def init_optimizer(model):
     global optimizer, optimizer_style, optimizer_adv
     global scheduler, scheduler_style, scheduler_adv
@@ -235,13 +211,6 @@ def train_sag(model,step,data):
         status['src']['l_adv'].update(loss_adv.item())
     status['src']['acc'].update(compute_accuracy(y, label))
 
-    ## Log result
-    # if step % args.log_interval == 0:
-    #     print('[{}/{} ({:.0f}%)] lr {:.5f}, {}'.format(
-    #         step, args.iterations, 100. * step / args.iterations, status['lr'],
-    #         ', '.join(['{} {}'.format(k, v) for k, v in status['src'].items()])))
-
-
     return model.state_dict()
 
 if __name__ == '__main__':
@@ -296,6 +265,7 @@ if __name__ == '__main__':
 
     # Training
     train_loss, train_accuracy = [], []
+    train_loss_style,train_loss_adv=[],[]
     val_acc_list, net_list = [], []
     cv_loss, cv_acc = [], []
     print_every = 2
@@ -303,6 +273,7 @@ if __name__ == '__main__':
 
     for epoch in tqdm(range(args.epochs)):
         local_weights, local_losses = [], []
+        local_losses_style, local_losses_adv = [], []
         print(f'\n | Global Training Round : {epoch+1} |\n')
 
         global_model.train()
@@ -312,11 +283,16 @@ if __name__ == '__main__':
         for idx in idxs_users:
             local_model = LocalUpdate(args=args, dataset=dataset_srcs,
                                       idxs=user_groups[idx],logger=logger,
-                                      opti=opti_dic, status = copy.deepcopy(status))
-            w, loss = local_model.update_weights(
+                                      opti=opti_dic, status = copy.deepcopy(status),
+                                      flag='train')
+            w, loss,loss_style,loss_adv = local_model.update_weights(
                 model=copy.deepcopy(global_model), global_round=epoch)
             local_weights.append(copy.deepcopy(w))
+
             local_losses.append(copy.deepcopy(loss))
+            local_losses_style.append(copy.deepcopy(loss_style))
+            local_losses_adv.append(copy.deepcopy(loss_adv))
+
             print('='*50,"CLIENT:",idx,"IS DONE",'='*50)
 
         # update global weights
@@ -326,17 +302,23 @@ if __name__ == '__main__':
         global_model.load_state_dict(global_weights)
 
         loss_avg = sum(local_losses) / len(local_losses)
+        loss_avg_style = sum(local_losses_style) / len(local_losses_style)
+        loss_avg_adv = sum(local_losses_adv) / len(local_losses_adv)
+
         train_loss.append(loss_avg)
+        train_loss_style.append(loss_avg_style)
+        train_loss_adv.append(loss_avg_adv)
 
         # Calculate avg training accuracy over all users at every epoch
-        list_acc, list_loss = [], []
+        list_acc, list_loss=[], []
         global_model.eval()
+
         for c in range(args.num_users):
             local_model = LocalUpdate(args=args, dataset=dataset_srcs,idxs=user_groups[idx],
-                                      logger=logger,opti=opti_dic, status = status)
-            acc, loss = local_model.inference(model=global_model)
+                                      logger=logger,opti=opti_dic, status = copy.deepcopy(status),
+                                      flag='val')
+            acc = local_model.inference(model=global_model)
             list_acc.append(acc)
-            list_loss.append(loss)
         train_accuracy.append(sum(list_acc)/len(list_acc))
 
         # print global training loss after every 'i' rounds
