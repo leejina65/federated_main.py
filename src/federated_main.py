@@ -87,7 +87,7 @@ def init_loader(): #train_dataset, val_dataset,test_dataset):
 
         if args.iid:
             # Sample IID user data from Mnist
-            user_groups = pacs_iid(dataset_srcs, trClssnum, args.num_users)
+            user_groups = pacs_iid(dataset_srcs, trClssnum, args.num_users,domain_set = 1)
         else:
             # Sample Non-IID user data from Mnist
             user_groups = pacs_noniid(dataset_srcs, args.num_users)
@@ -268,12 +268,14 @@ if __name__ == '__main__':
     train_loss_style,train_loss_adv=[],[]
     val_acc_list, net_list = [], []
     cv_loss, cv_acc = [], []
+    acc_g =[]
     print_every = 2
     val_loss_pre, counter = 0, 0
 
     for epoch in tqdm(range(args.epochs)):
         local_weights, local_losses = [], []
         local_losses_style, local_losses_adv = [], []
+        acc_c = []
         print(f'\n | Global Training Round : {epoch+1} |\n')
 
         global_model.train()
@@ -285,13 +287,14 @@ if __name__ == '__main__':
                                       idxs=user_groups[idx],logger=logger,
                                       opti=opti_dic, status = copy.deepcopy(status),
                                       flag='train')
-            w, loss,loss_style,loss_adv = local_model.update_weights(
+            w, loss,loss_style,loss_adv, acc_history = local_model.update_weights(
                 model=copy.deepcopy(global_model), global_round=epoch)
             local_weights.append(copy.deepcopy(w))
 
             local_losses.append(copy.deepcopy(loss))
             local_losses_style.append(copy.deepcopy(loss_style))
             local_losses_adv.append(copy.deepcopy(loss_adv))
+            acc_c.append(acc_history)
 
             print('='*50,"CLIENT:",idx,"IS DONE",'='*50)
 
@@ -320,12 +323,13 @@ if __name__ == '__main__':
             acc = local_model.inference(model=global_model)
             list_acc.append(acc)
         train_accuracy.append(sum(list_acc)/len(list_acc))
+        acc_g.append(acc_c)
 
         # print global training loss after every 'i' rounds
-        if (epoch+1) % print_every == 0:
-            print(f' \nAvg Training Stats after {epoch+1} global rounds:')
-            print(f'Training Loss : {np.mean(np.array(train_loss))}')
-            print('Train Accuracy: {:.2f}% \n'.format(100*train_accuracy[-1]))
+        #if (epoch+1) % print_every == 0:
+        print(f' \nAvg Training Stats after {epoch+1} global rounds:')
+        print(f'Training Loss : {np.mean(np.array(train_loss))}')
+        print('Train Accuracy: {:.2f}% \n'.format(100*train_accuracy[-1]))
 
     # Test inference after completion of training
     test_acc, test_loss = test_inference(args, global_model, dataset_tgts)

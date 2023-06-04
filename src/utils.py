@@ -34,7 +34,7 @@ def get_dataset(args):
     # sample training data amongst users
     if args.iid:
         # Sample IID user data from Mnist
-        user_groups = pacs_iid(train_dataset,trClssnum, args.num_users)
+        user_groups = pacs_iid(train_dataset,trClssnum, args.num_users ,domain_set=1)
     else:
         # Sample Non-IID user data from Mnist
         user_groups = pacs_noniid(train_dataset, args.num_users)

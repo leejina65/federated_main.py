@@ -13,6 +13,8 @@ import cv2
 import time
 import numpy as np
 from torchvision import transforms
+
+
 class DatasetSplit(Dataset):
     """An abstract Dataset class wrapped around Pytorch Dataset class.
     """
@@ -172,14 +174,18 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         # Set mode to train model
         model.train()
         epoch_loss,epoch_loss_style,epoch_loss_adv = [],[],[]
+        acc_total = []
 
         optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,momentum=0.5)
 
         for iter in range(self.args.local_ep):
-            batch_loss,batch_loss_style,batch_loss_adv = [],[],[]
+            batch_loss,batch_loss_style,batch_loss_adv,acc_list = [],[],[],[]
             for batch_idx, (images, labels) in enumerate(self.trainloader):
                 model.zero_grad()
                 loss_style,loss_adv,loss,y_ = self.idx_sagnet(model, iter, images,labels, flag=self.flag,optimizer=optimizer)
+
+                acc = compute_accuracy(y_.data.cpu().numpy(), labels.data.cpu().numpy())
+
 
                 if self.args.verbose and (batch_idx % 10 == 0):
                     print('| Global Round : {} | Local Epoch : {} | [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -193,11 +199,16 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                 batch_loss.append(loss.item())
                 batch_loss_style.append(loss_style.item())
                 batch_loss_adv.append(loss_adv.item())
+                acc_list.append(acc)
+
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             epoch_loss_style.append(sum(batch_loss_style) / len(batch_loss_style))
             epoch_loss_adv.append(sum(batch_loss_adv) / len(batch_loss_adv))
+            acc_total.append(sum(acc_list)/len(acc_list))
 
-        return model.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv)
+            print('\tacc: {:.6f}'.format(sum(acc_list)/len(acc_list)))
+
+        return model.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total
 
     def inference(self, model):
         """
