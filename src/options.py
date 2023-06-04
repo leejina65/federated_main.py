@@ -7,17 +7,17 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # federated arguments (Notation for the arguments followed from paper)
-    parser.add_argument('--epochs', type=int, default=50, #10->50
+    parser.add_argument('--epochs', type=int, default=10, #10->50
                         help="number of rounds of training")
-    parser.add_argument('--num_users', type=int, default=20,
+    parser.add_argument('--num_users', type=int, default=10,
                         help="number of users: K")
     parser.add_argument('--frac', type=float, default=0.5,
                         help='the fraction of clients: C')
-    parser.add_argument('--local_ep', type=int, default=20,
+    parser.add_argument('--local_ep', type=int, default=10,
                         help="the number of local epochs: E")
     parser.add_argument('--local_bs', type=int, default=16,
-                        help="local batch size: B") #FD=10 sagnet=32
-    parser.add_argument('--lr', type=float, default=0.001, #0.01 ->0.001
+                        help="local batch size: B") #FL=10 sagnet=32
+    parser.add_argument('--lr', type=float, default=0.01, #0.01 ->0.001
                         help='learning rate') #sagnet=0.04
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='SGD momentum (default: 0.5)') #sagnet=0.9
@@ -47,7 +47,7 @@ def args_parser():
                         to a specific GPU ID. Default set to use CPU.")
     parser.add_argument('--optimizer', type=str, default='sgd', help="type \
                         of optimizer")
-    parser.add_argument('--iid', type=int, default=0,
+    parser.add_argument('--iid', type=int, default=1,
                         help='Default set to IID. Set to 0 for non-IID.')
     parser.add_argument('--unequal', type=int, default=0,
                         help='whether to use unequal data splits for  \

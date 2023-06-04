@@ -15,6 +15,7 @@ import numpy as np
 from torchvision import transforms
 
 
+
 class DatasetSplit(Dataset):
     """An abstract Dataset class wrapped around Pytorch Dataset class.
     """
@@ -36,7 +37,7 @@ class DatasetSplit(Dataset):
 
 
 class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
-    def __init__(self, args, dataset, idxs, logger, opti, status,flag):
+    def __init__(self, args, dataset_srcs,dataset_vals, idxs, logger, opti, status,flag):
         self.args = args
         self.status = status
 
@@ -52,25 +53,20 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         self.optimizer_adv = opti['optimizer_adv']
         self.flag=flag
         self.logger = logger
-        self.trainloader, self.testloader = self.train_val_test(dataset, list(idxs))
+        self.trainloader=self.train_val_test(dataset_srcs, list(idxs))
+        for val_domain in range(len(dataset_vals)):
+            dataset_val_total=[k for k in dataset_vals[val_domain].samples]
+        self.valloader=DataLoader(dataset_val_total,batch_size=self.args.local_bs, shuffle=True)
         self.device = 'cuda' if args.gpu else 'cpu'
         # Default criterion set to NLL loss function
 
     def train_val_test(self, dataset, idxs):
-        """
-        Returns train, validation and test dataloaders for a given dataset
-        and user indexes.
-        """
         # split indexes for train, validation, and test (80, 10, 10)
-        idxs_train = idxs[0][:int(0.8*len(idxs[0]))]
-        idxs_test = idxs[int(0.8*len(idxs)):]
-
         #loader for per clinet
-        trainloader = DataLoader(DatasetSplit(dataset, idxs_train),
+        trainloader = DataLoader(DatasetSplit(dataset, idxs),
                                  batch_size=self.args.local_bs, shuffle=True)
-        testloader = DataLoader(DatasetSplit(dataset, idxs_test),
-                                batch_size=self.args.local_bs, shuffle=False) #int(len(idxs_test)/10)
-        return trainloader, testloader
+        return trainloader
+
     def idx_sagnet(self, model, step, images,labels,flag,optimizer='None'):
         args = args_parser()
         criterion = torch.nn.CrossEntropyLoss()
@@ -160,12 +156,6 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                 self.status['src']['l_s'].update(loss_style.item())
                 self.status['src']['l_adv'].update(loss_adv.item())
             self.status['src']['acc'].update(acc)
-
-            ## Log result
-            # if step % self.args.log_interval == 0:
-            #     print('[{}/{} ({:.0f}%)] lr {:.5f}, {}'.format(
-            #         step, self.args.iterations, 100. * step / self.args.iterations, self.status['lr'],
-            #         ', '.join(['{} {}'.format(k, v) for k, v in self.status['src'].items()])))
             return loss_style,loss_adv,loss,y
         else:
             return y
@@ -216,9 +206,10 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         """
         model.eval()
         preds, labels = [], []
+        preds_total,labels_total,acc_total= [], [],[]
         loss, total, correct = 0.0, 0.0, 0.0
 
-        for batch_idx, (images, label) in enumerate(self.testloader):
+        for batch_idx, (images, label) in enumerate(self.valloader):
             y = self.idx_sagnet(model, iter, images, label, flag=self.flag, optimizer='None')
 
             # result
@@ -228,24 +219,32 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         preds = np.concatenate(preds, axis=0)
         labels = np.concatenate(labels, axis=0)
         acc = compute_accuracy(preds, labels)
-        return acc
+
+        preds_total.append(preds)
+        labels_total.append(labels)
+        acc_total.append(acc)
+
+        return acc_total
 
 
-def test_inference(args, model, test_dataset):
+def test_inference(args, model, test_dataset,scheduler, scheduler_style, scheduler_adv):
     """ Returns the test accuracy and loss.
     """
     model.eval()
     preds, labels = [], []
     loss, total, correct = 0.0, 0.0, 0.0
+    for test_domain in range(len(test_dataset)):
+        test_dataset = [k for k in test_dataset[test_domain].samples]
     testloader = DataLoader(test_dataset, batch_size=128,
                             shuffle=False)
     criterion = nn.NLLLoss().to('cuda')
 
     for batch_idx, (images, label) in enumerate(testloader):
-        y = test_sagnet(model, iter, images, label)
+        y = test_sagnet(model, iter, images, label,scheduler, scheduler_style, scheduler_adv)
 
         # result
-        batch_loss = criterion(y, labels)
+        label = label.cuda()
+        batch_loss = criterion(y, label)
         loss += batch_loss.item()
         preds += [y.data.cpu().numpy()]
         labels += [label.data.cpu().numpy()]
@@ -263,8 +262,8 @@ def test_inference(args, model, test_dataset):
 
     return acc,loss
 
-def test_sagnet(self, model, step, images, labels):
-    args = args_parser()
+def test_sagnet(model, step, images, labels,scheduler, scheduler_style, scheduler_adv):
+    args = options.args_parser()
     criterion = torch.nn.CrossEntropyLoss()
 
     stats = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
@@ -283,20 +282,16 @@ def test_sagnet(self, model, step, images, labels):
         transforms.ToTensor(),
         transforms.Normalize(*stats)])
 
-    self.scheduler.step()
-
-    if self.args.sagnet:
-        self.scheduler_style.step()
-        self.scheduler_adv.step()
+    scheduler.step()
+    scheduler_style.step()
+    scheduler_adv.step()
 
     ## Load data
     tic = time.time()
-
-    self.args = options.args_parser()
     data = images
     label = labels
 
-    root = self.args.dataset_dir + '/pacs/images/kfold/'
+    root = args.dataset_dir + '/pacs/images/kfold/'
     imgroot = [root + data[i] for i in range(len(data))]
     img = [Image.open(img).convert("RGB") for img in imgroot]
     data = [train_transform(img) for img in img]
@@ -304,7 +299,7 @@ def test_sagnet(self, model, step, images, labels):
 
     rand_idx = torch.randperm(len(data))
 
-    data = data[rand_idx]
+    data = data[rand_idx].cuda()
     label = label[rand_idx].cuda()
 
     time_data = time.time() - tic

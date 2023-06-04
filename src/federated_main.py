@@ -83,16 +83,16 @@ def init_loader(): #train_dataset, val_dataset,test_dataset):
                              split='test',
                              transform=test_transform)
                         for domain in args.targets]
-        num_classes = 7
+        num_classes = args.num_classes
 
         if args.iid:
             # Sample IID user data from Mnist
-            user_groups = pacs_iid(dataset_srcs, trClssnum, args.num_users,domain_set = 1)
+            user_groups = pacs_iid(dataset_srcs, trClssnum, args.num_users,domain_set = 0)
         else:
             # Sample Non-IID user data from Mnist
             user_groups = pacs_noniid(dataset_srcs, args.num_users)
 
-        return dataset_srcs, dataset_vals, dataset_tgts, user_groups
+        return dataset_srcs, dataset_vals,dataset_tgts, user_groups
 
 def init_optimizer(model):
     global optimizer, optimizer_style, optimizer_adv
@@ -116,7 +116,6 @@ def init_optimizer(model):
     optimizer = optim.SGD(params, **optim_hyperparams) #Sagnet에 맞춰서 hyperparameters
     scheduler = Scheduler(optimizer, **sch_hyperparams)
     criterion = torch.nn.CrossEntropyLoss()
-
 
     # Style learning
     params_style = model.style_params()
@@ -283,7 +282,7 @@ if __name__ == '__main__':
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
 
         for idx in idxs_users:
-            local_model = LocalUpdate(args=args, dataset=dataset_srcs,
+            local_model = LocalUpdate(args=args, dataset_srcs=dataset_srcs,dataset_vals=dataset_vals,
                                       idxs=user_groups[idx],logger=logger,
                                       opti=opti_dic, status = copy.deepcopy(status),
                                       flag='train')
@@ -316,23 +315,22 @@ if __name__ == '__main__':
         list_acc, list_loss=[], []
         global_model.eval()
 
-        for c in range(args.num_users):
-            local_model = LocalUpdate(args=args, dataset=dataset_srcs,idxs=user_groups[idx],
-                                      logger=logger,opti=opti_dic, status = copy.deepcopy(status),
-                                      flag='val')
-            acc = local_model.inference(model=global_model)
-            list_acc.append(acc)
-        train_accuracy.append(sum(list_acc)/len(list_acc))
+        local_model = LocalUpdate(args=args, dataset_srcs=dataset_srcs,dataset_vals=dataset_vals,idxs=user_groups[idx],
+                                  logger=logger,opti=opti_dic, status = copy.deepcopy(status),
+                                  flag='val')
+        list_acc = local_model.inference(model=global_model) #각 val domain acc
+        train_accuracy=list_acc
         acc_g.append(acc_c)
 
-        # print global training loss after every 'i' rounds
+        # print global training loss after every 'i' rounds1,1
         #if (epoch+1) % print_every == 0:
         print(f' \nAvg Training Stats after {epoch+1} global rounds:')
         print(f'Training Loss : {np.mean(np.array(train_loss))}')
-        print('Train Accuracy: {:.2f}% \n'.format(100*train_accuracy[-1]))
+        print('Train Accuracy:',*np.multiply(100, train_accuracy)) #art,sket,photo
+
 
     # Test inference after completion of training
-    test_acc, test_loss = test_inference(args, global_model, dataset_tgts)
+    test_acc, test_loss = test_inference(args, global_model, dataset_tgts,scheduler, scheduler_style, scheduler_adv)
 
     print(f' \n Results after {args.epochs} global rounds of training:')
     print("|---- Avg Train Accuracy: {:.2f}%".format(100*train_accuracy[-1]))

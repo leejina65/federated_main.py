@@ -23,78 +23,78 @@ def mnist_iid(dataset, num_users):
         all_idxs = list(set(all_idxs) - dict_users[i])
     return dict_users
 '''#trainclass_num 350
+
+
 def pacs_iid(dataset,trainclass_num, num_users, domain_set):
-    class_num=len(trainclass_num) # trainclassnum=[N,N2,N3], class_num=3
+    domain_num=len(trainclass_num) # trainclassnum=[N,N2,N3], class_num=3
     #tempdomain for each class ==> split each class into same ratio
     #0~N-1, N~(N)+N2-1, N+N2~(N+N2)+N3-1
-    if domain_set == 0:
-        dict_users={}
-        for idx in range(class_num):
-            data=dataset[idx-1].samples
-            str=len(dataset[idx-2].samples) if idx!=0 else 0
-            end=str+len(data)-1
-            domain=data
+    #domain # == 4 (default)
+    dict_users={}
+    num_items_list = [int(len(dataset[i].samples) / num_users) for i in range(domain_num)]
+    num_items_min=min(num_items_list)
 
-            num_items = int(len(domain) / num_users)  # client당 가지는 해당 domain data#
-            all_idxs = [i for i in range(str,end+1)] #0~N-1, N~(N)+N2-1, N+N2~(N+N2)+N3-1
-
-            for i in range(num_users):  # users에게 data 나눠주기
-                user_idxs = set(np.random.choice(all_idxs, num_items, replace=False))
-                dict_users.setdefault(i, set()).add(tuple(user_idxs))
-                all_idxs = list(set(all_idxs).difference(user_idxs))
-
-    if domain_set == 1:
-        dict_users = {}
-        all_idxs , num_items = [None] * class_num , [None] * class_num
-        choice_domain_list = []
-        for i in range(num_users):  # 유저의 개수 만큼 랜덤으로 4개의 도메인 중 2개를 뽑은 후 리스트로 저장
-            choice_domain = np.random.choice (range(class_num), 2, replace=False)
-            choice_domain_list.append(choice_domain) # Non-iid
-
-            # IID code
-            #choice_domain_list = np.random.randint(0, class_num, size=(num_users, 2))
-
-        # 각 도메인마다 선택한 client의 개수를 센다
-        choice_domain_num = collections.Counter(np.concatenate(choice_domain_list).tolist())
-
-
-        for idx in range(class_num):
-            data = dataset[idx - 1].samples
-            str = len(dataset[idx - 2].samples) if idx != 0 else 0
-            end = str + len(data) - 1
-            domain = data
-
-            # 각 도메인 마다 데이터와 각 client가 가져갈 개수 저장
-            num_items[idx] = int(len(domain) / choice_domain_num[idx])  # client당 가지는 해당 domain data#
-            all_idxs[idx] = [i for i in range(str, end + 1)]
+    for domain_idx in range(domain_num):
+        data=dataset[domain_idx-1].samples
+        str=len(dataset[domain_idx-2].samples) if domain_idx!=0 else 0
+        end=str+len(data)-1
+        ###########################################
+        #num_items = int(len(data) / num_users)  # client당 가지는 해당 domain data#
+        ###########################################
+        num_items=num_items_min
+        all_idxs = [i for i in range(str,end+1)] #0~N-1, N~(N)+N2-1, N+N2~(N+N2)+N3-1
 
         for i in range(num_users):  # users에게 data 나눠주기
-            for u_domain in choice_domain_list[i]:  # 해당 유저가 선택한 domain 에 해당하는 데이터 가져오기
-                user_idxs = set(np.random.choice(all_idxs[u_domain], num_items[u_domain], replace=False))
-                dict_users.setdefault(i, set()).add(tuple(user_idxs))
-                all_idxs[u_domain] = list(set(all_idxs[u_domain]).difference(user_idxs))
-
-
+            user_idxs = set(np.random.choice(all_idxs, num_items, replace=False))
+            dict_users.setdefault(i, set()).add(tuple(user_idxs))
+            all_idxs = list(set(all_idxs).difference(user_idxs))
     return dict_users #key:client, values: their data
 
 
-def pacs_noniid(dataset, num_users):
+def pacs_noniid(dataset,class_num,num_users):
     #client가 가지는 domain의 개수를 변수화한다는 의미:: 모든 client가 동일한 개수의 domain
     #
-    dataset_total = [sample for dataset in dataset for sample in dataset.samples]
-    mindomain=3 #minimun domain type
-    dict_users={}
-    num_items=0
-    for i in dataset:
-        num_items+=int(len(i.samples)/num_users)
-    # len([sample for dataset in dataset for sample in dataset.sample])
-    # num_items=int(len(dataset_total)/num_users)
-    all_idxs=list(range(len(dataset_total)))
+    # dataset_total = [sample for dataset in dataset for sample in dataset.samples]
+    # mindomain=3 #minimun domain type
+    # dict_users={}
+    # num_items=0
+    # for i in dataset:
+    #     num_items+=int(len(i.samples)/num_users)
+    # # len([sample for dataset in dataset for sample in dataset.sample])
+    # # num_items=int(len(dataset_total)/num_users)
+    # all_idxs=list(range(len(dataset_total)))
+    #
+    # for i in range(num_users):
+    #     user_idxs=set(np.random.choice(all_idxs,num_items,replace=False))
+    #     dict_users.setdefault(i,set()).add(tuple(user_idxs))
+    #     all_idxs=list(set(all_idxs).difference(user_idxs))
+    dict_users = {}
+    all_idxs , num_items = [None] * class_num , [None] * class_num
+    choice_domain_list = []
+    for i in range(num_users):  # 유저의 개수 만큼 랜덤으로 4개의 도메인 중 2개를 뽑은 후 리스트로 저장
+        choice_domain = np.random.choice (range(class_num), 2, replace=False)
+        choice_domain_list.append(choice_domain) # Non-iid
 
-    for i in range(num_users):
-        user_idxs=set(np.random.choice(all_idxs,num_items,replace=False))
-        dict_users.setdefault(i,set()).add(tuple(user_idxs))
-        all_idxs=list(set(all_idxs).difference(user_idxs))
+        # IID code
+        #choice_domain_list = np.random.randint(0, class_num, size=(num_users, 2))
+
+    # 각 도메인마다 선택한 client의 개수를 센다
+    choice_domain_num = collections.Counter(np.concatenate(choice_domain_list).tolist())
+    for idx in range(class_num):
+        data = dataset[idx - 1].samples
+        str = len(dataset[idx - 2].samples) if idx != 0 else 0
+        end = str + len(data) - 1
+        domain = data
+
+        # 각 도메인 마다 데이터와 각 client가 가져갈 개수 저장
+        num_items[idx] = int(len(domain) / choice_domain_num[idx])  # client당 가지는 해당 domain data#
+        all_idxs[idx] = [i for i in range(str, end + 1)]
+
+    for i in range(num_users):  # users에게 data 나눠주기
+        for u_domain in choice_domain_list[i]:  # 해당 유저가 선택한 domain 에 해당하는 데이터 가져오기
+            user_idxs = set(np.random.choice(all_idxs[u_domain], num_items[u_domain], replace=False))
+            dict_users.setdefault(i, set()).add(tuple(user_idxs))
+            all_idxs[u_domain] = list(set(all_idxs[u_domain]).difference(user_idxs))
 
     return dict_users
 
