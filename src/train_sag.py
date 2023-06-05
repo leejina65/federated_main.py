@@ -99,11 +99,11 @@ def main(args):
 
     # Set gpus
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-    
+
     # Set domains
     if args.dataset == 'pacs':
         all_domains = ['art_painting', 'cartoon', 'sketch', 'photo']
-    
+
     if args.sources[0] == 'Rest':
         args.sources = [d for d in all_domains if d not in args.targets]
     if args.targets[0] == 'Rest':
@@ -139,7 +139,7 @@ def main(args):
     # Initialize optimizer
     print('\nInitialize optimizers...')
     init_optimizer()
-    
+
     # Initialize status
     src_keys = ['t_data', 't_net', 'l_c', 'l_s', 'l_adv', 'acc']
     status = OrderedDict([
@@ -160,22 +160,22 @@ def main(args):
 
         if (step + 1) % args.test_interval == 0:
             save_model(model, save_dir, 'latest')
-            
+
             for i, domain in enumerate(args.sources):
                 print('Validation: {}'.format(domain))
                 status['val_acc'][domain] = test(loader_vals[i])
             for i, domain in enumerate(args.targets):
                 print('Test: {}'.format(domain))
                 status['test_acc'][domain] = test(loader_tgts[i])
-            
+
             status['mean_val_acc'] = sum(status['val_acc'].values()) / len(status['val_acc'])
             status['mean_test_acc'] = sum(status['test_acc'].values()) / len(status['test_acc'])
-                    
-            print('Val accuracy: {:.5f} ({})'.format(status['mean_val_acc'], 
+
+            print('Val accuracy: {:.5f} ({})'.format(status['mean_val_acc'],
                     ', '.join(['{}: {:.5f}'.format(k, v) for k, v in status['val_acc'].items()])))
-            print('Test accuracy: {:.5f} ({})'.format(status['mean_test_acc'], 
+            print('Test accuracy: {:.5f} ({})'.format(status['mean_test_acc'],
                     ', '.join(['{}: {:.5f}'.format(k, v) for k, v in status['test_acc'].items()])))
-            
+
             results.append(copy.deepcopy(status))
             save_result(results, save_dir)
 
@@ -186,7 +186,7 @@ def init_loader():
 
     # Set transforms
     stats = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    
+
     trans_list = []
     trans_list.append(transforms.RandomResizedCrop(args.crop_size, scale=(0.5, 1)))
     if args.colorjitter:
@@ -207,7 +207,7 @@ def init_loader():
         from data.pacs import PACS
         image_dir = os.path.join(args.dataset_dir, args.dataset, 'images', 'kfold')
         split_dir = os.path.join(args.dataset_dir, args.dataset, 'splits')
-     
+
         print('--- Training ---')
         dataset_srcs = [PACS(image_dir,
                              split_dir,
@@ -238,23 +238,23 @@ def init_loader():
     kwargs = {'num_workers': args.workers, 'pin_memory': True}
     loader_srcs = [torch.utils.data.DataLoader(
                         dataset,
-                        batch_size=args.batch_size, 
-                        shuffle=True, 
-                        drop_last=True, 
+                        batch_size=args.batch_size,
+                        shuffle=True,
+                        drop_last=True,
                         **kwargs)
                    for dataset in dataset_srcs]
     loader_vals = [torch.utils.data.DataLoader(
                         dataset,
-                        batch_size=int(args.batch_size * 4), 
-                        shuffle=False, 
-                        drop_last=False, 
+                        batch_size=int(args.batch_size * 4),
+                        shuffle=False,
+                        drop_last=False,
                         **kwargs)
                    for dataset in dataset_vals]
     loader_tgts = [torch.utils.data.DataLoader(
                         dataset_tgt,
-                        batch_size=int(args.batch_size * 4), 
-                        shuffle=False, 
-                        drop_last=False, 
+                        batch_size=int(args.batch_size * 4),
+                        shuffle=False,
+                        drop_last=False,
                         **kwargs)
                    for dataset_tgt in dataset_tgts]
 def init_model():
@@ -271,9 +271,9 @@ def init_optimizer():
     global optimizer, optimizer_style, optimizer_adv
     global scheduler, scheduler_style, scheduler_adv
     global criterion, criterion_style, criterion_adv
-    
+
     # Set hyperparams
-    optim_hyperparams = {'lr': args.lr, 
+    optim_hyperparams = {'lr': args.lr,
                          'weight_decay': args.weight_decay,
                          'momentum': args.momentum}
     if args.scheduler == 'step':
@@ -283,20 +283,20 @@ def init_optimizer():
     elif args.scheduler == 'cosine':
         Scheduler = optim.lr_scheduler.CosineAnnealingLR
         sch_hyperparams = {'T_max': args.iterations}
-    
+
     # Main learning
     params = model.module.parameters()
     optimizer = optim.SGD(params, **optim_hyperparams)
     scheduler = Scheduler(optimizer, **sch_hyperparams)
     criterion = torch.nn.CrossEntropyLoss()
-    
+
     if args.sagnet:
         # Style learning
         params_style = model.module.style_params()
         optimizer_style = optim.SGD(params_style, **optim_hyperparams)
         scheduler_style = Scheduler(optimizer_style, **sch_hyperparams)
         criterion_style = torch.nn.CrossEntropyLoss()
-        
+
         # Adversarial learning
         params_adv = model.module.adv_params()
         optimizer_adv = optim.SGD(params_adv, **optim_hyperparams)
@@ -307,7 +307,7 @@ def train(step):
 
     ## Initialize iteration
     model.train()
-    
+
     scheduler.step()
     if args.sagnet:
         scheduler_style.step()
@@ -315,7 +315,7 @@ def train(step):
 
     ## Load data
     tic = time.time()
-    
+
     n_srcs = len(args.sources)
     if step == 0:
         dataiter_srcs = [None] * n_srcs
@@ -331,7 +331,7 @@ def train(step):
     rand_idx = torch.randperm(len(data))
     data = data[rand_idx]
     label = label[rand_idx].cuda()
-    
+
     time_data = time.time() - tic
 
     ## Process batch
@@ -339,22 +339,22 @@ def train(step):
 
     # forward
     y, y_style = model(data)
-        
+
     if args.sagnet:
         # learn style
         loss_style = criterion(y_style, label)
         optimizer_style.zero_grad()
         loss_style.backward(retain_graph=True)
         optimizer_style.step()
-    
-        # learn style_adv
+
+        # learn ee_adv
         loss_adv = args.w_adv * criterion_adv(y_style)
         optimizer_adv.zero_grad()
         loss_adv.backward(retain_graph=True)
         if args.clip_adv is not None:
             torch.nn.utils.clip_grad_norm_(model.module.adv_params(), args.clip_adv)
         optimizer_adv.step()
-    
+
     # learn content
     loss = criterion(y, label)
     optimizer.zero_grad()
@@ -386,7 +386,7 @@ def test(loader_tgt):
         # forward
         with torch.no_grad():
             y, _ = model(data)
-        
+
         # result
         preds += [y.data.cpu().numpy()]
         labels += [label.data.cpu().numpy()]

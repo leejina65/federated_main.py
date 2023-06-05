@@ -33,7 +33,7 @@ def pacs_iid(dataset,trainclass_num, num_users, domain_set):
     dict_users={}
     num_items_list = [int(len(dataset[i].samples) / num_users) for i in range(domain_num)]
     num_items_min=min(num_items_list)
-
+    print(num_items_min)
     for domain_idx in range(domain_num):
         data=dataset[domain_idx-1].samples
         str=len(dataset[domain_idx-2].samples) if domain_idx!=0 else 0

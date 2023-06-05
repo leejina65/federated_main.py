@@ -22,11 +22,7 @@ class DatasetSplit(Dataset):
     def __init__(self, dataset, idxs):
         self.dataset = [sample for dataset in dataset for sample in dataset.samples]
         a_ind = [int(j) for i in idxs for j in (i if isinstance(i, tuple) else (i,))]
-        # self.dataset0=[sample for sample in dataset.samples[0]]
         self.idxs=a_ind
-#        self.args = options.args_parser()
-#        self.root = self.args.dataset_dir
-#        self.idxs = [int(i) for i in idxs]
 
     def __len__(self):
         return len(self.idxs)
@@ -61,7 +57,6 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         # Default criterion set to NLL loss function
 
     def train_val_test(self, dataset, idxs):
-        # split indexes for train, validation, and test (80, 10, 10)
         #loader for per clinet
         trainloader = DataLoader(DatasetSplit(dataset, idxs),
                                  batch_size=self.args.local_bs, shuffle=True)
@@ -103,7 +98,12 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         root=self.args.dataset_dir+'/pacs/images/kfold/'
         imgroot=[root+data[i] for i in range(len(data))]
         img=[Image.open(img).convert("RGB") for img in imgroot]
-        data=[train_transform(img) for img in img]
+
+        if flag=='train':
+            data=[train_transform(img) for img in img]
+        elif flag=='val':
+            data = [test_transform(img) for img in img]
+
         data=torch.stack(data)
 
         rand_idx = torch.randperm(len(data))
@@ -196,7 +196,9 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
             epoch_loss_adv.append(sum(batch_loss_adv) / len(batch_loss_adv))
             acc_total.append(sum(acc_list)/len(acc_list))
 
+            print('\tloss: {:.6f}\tloss_style: {:.6f}\tloss_adv: {:.6f}\t'.format(sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv)))
             print('\tacc: {:.6f}'.format(sum(acc_list)/len(acc_list)))
+
 
         return model.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total
 
@@ -220,11 +222,7 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         labels = np.concatenate(labels, axis=0)
         acc = compute_accuracy(preds, labels)
 
-        preds_total.append(preds)
-        labels_total.append(labels)
-        acc_total.append(acc)
-
-        return acc_total
+        return acc
 
 
 def test_inference(args, model, test_dataset,scheduler, scheduler_style, scheduler_adv):
@@ -246,6 +244,7 @@ def test_inference(args, model, test_dataset,scheduler, scheduler_style, schedul
         label = label.cuda()
         batch_loss = criterion(y, label)
         loss += batch_loss.item()
+
         preds += [y.data.cpu().numpy()]
         labels += [label.data.cpu().numpy()]
 
@@ -267,15 +266,6 @@ def test_sagnet(model, step, images, labels,scheduler, scheduler_style, schedule
     criterion = torch.nn.CrossEntropyLoss()
 
     stats = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    trans_list = []
-    trans_list.append(transforms.RandomResizedCrop(args.crop_size, scale=(0.5, 1)))
-    if args.colorjitter:
-        trans_list.append(transforms.ColorJitter(*[args.colorjitter] * 4))
-    trans_list.append(transforms.RandomHorizontalFlip())
-    trans_list.append(transforms.ToTensor())
-    trans_list.append(transforms.Normalize(*stats))
-    train_transform = transforms.Compose(trans_list)
-
     test_transform = transforms.Compose([
         transforms.Resize(args.input_size),
         transforms.CenterCrop(args.crop_size),
@@ -294,7 +284,7 @@ def test_sagnet(model, step, images, labels,scheduler, scheduler_style, schedule
     root = args.dataset_dir + '/pacs/images/kfold/'
     imgroot = [root + data[i] for i in range(len(data))]
     img = [Image.open(img).convert("RGB") for img in imgroot]
-    data = [train_transform(img) for img in img]
+    data = [test_transform(img) for img in img]
     data = torch.stack(data)
 
     rand_idx = torch.randperm(len(data))

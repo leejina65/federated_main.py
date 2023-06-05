@@ -7,17 +7,17 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # federated arguments (Notation for the arguments followed from paper)
-    parser.add_argument('--epochs', type=int, default=10, #10->50
+    parser.add_argument('--epochs', type=int, default=100, #10->50
                         help="number of rounds of training")
     parser.add_argument('--num_users', type=int, default=10,
                         help="number of users: K")
     parser.add_argument('--frac', type=float, default=0.5,
                         help='the fraction of clients: C')
-    parser.add_argument('--local_ep', type=int, default=10,
+    parser.add_argument('--local_ep', type=int, default=25,
                         help="the number of local epochs: E")
     parser.add_argument('--local_bs', type=int, default=16,
                         help="local batch size: B") #FL=10 sagnet=32
-    parser.add_argument('--lr', type=float, default=0.01, #0.01 ->0.001
+    parser.add_argument('--lr', type=float, default=0.002, #0.01 ->0.001
                         help='learning rate') #sagnet=0.04
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='SGD momentum (default: 0.5)') #sagnet=0.9
@@ -41,7 +41,7 @@ def args_parser():
                         strided convolutions")
 
     # other arguments
-    parser.add_argument('--num_classes', type=int, default=10, help="number \
+    parser.add_argument('--num_classes', type=int, default=7, help="number \
                         of classes")
     parser.add_argument('--gpu', default=0, help="To use cuda, set \
                         to a specific GPU ID. Default set to use CPU.")
@@ -58,7 +58,7 @@ def args_parser():
     parser.add_argument('--seed', type=int, default=1, help='random seed')
 
 
-    parser.add_argument('--dataset-dir', type=str, default='C:/Users/BamiDeep1/Desktop/FLEG0420/minidataset',
+    parser.add_argument('--dataset-dir', type=str, default='C:/Users/BamiDeep1/Desktop/FLEG0420/dataset',
                         help='Sagnet:: home directory to dataset')
     parser.add_argument('--dataset', type=str, default='pacs',
                         help="Sagnet::dataset name")

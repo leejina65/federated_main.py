@@ -284,7 +284,7 @@ if __name__ == '__main__':
         for idx in idxs_users:
             local_model = LocalUpdate(args=args, dataset_srcs=dataset_srcs,dataset_vals=dataset_vals,
                                       idxs=user_groups[idx],logger=logger,
-                                      opti=opti_dic, status = copy.deepcopy(status),
+                                      opti=copy.deepcopy(opti_dic), status = copy.deepcopy(status),
                                       flag='train')
             w, loss,loss_style,loss_adv, acc_history = local_model.update_weights(
                 model=copy.deepcopy(global_model), global_round=epoch)
@@ -316,9 +316,10 @@ if __name__ == '__main__':
         global_model.eval()
 
         local_model = LocalUpdate(args=args, dataset_srcs=dataset_srcs,dataset_vals=dataset_vals,idxs=user_groups[idx],
-                                  logger=logger,opti=opti_dic, status = copy.deepcopy(status),
+                                  logger=logger,opti=copy.deepcopy(opti_dic), status = copy.deepcopy(status),
                                   flag='val')
-        list_acc = local_model.inference(model=global_model) #각 val domain acc
+        acc = local_model.inference(model=global_model) #각 val domain acc
+        list_acc.append(acc)
         train_accuracy=list_acc
         acc_g.append(acc_c)
 
@@ -326,11 +327,13 @@ if __name__ == '__main__':
         #if (epoch+1) % print_every == 0:
         print(f' \nAvg Training Stats after {epoch+1} global rounds:')
         print(f'Training Loss : {np.mean(np.array(train_loss))}')
-        print('Train Accuracy:',*np.multiply(100, train_accuracy)) #art,sket,photo
+        print('Train Accuracy: {:.2f}% \n'.format(100*train_accuracy[-1])) #art,sket,photo
 
 
     # Test inference after completion of training
-    test_acc, test_loss = test_inference(args, global_model, dataset_tgts,scheduler, scheduler_style, scheduler_adv)
+    opti_test = copy.deepcopy(opti_dic)
+    test_acc, test_loss = test_inference(args, global_model, dataset_tgts
+                                         ,opti_test['scheduler'], opti_test['scheduler_style'], opti_test['scheduler_adv'])
 
     print(f' \n Results after {args.epochs} global rounds of training:')
     print("|---- Avg Train Accuracy: {:.2f}%".format(100*train_accuracy[-1]))
