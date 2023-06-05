@@ -200,7 +200,7 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
             print('\tacc: {:.6f}'.format(sum(acc_list)/len(acc_list)))
 
 
-        return model.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total
+        return model.state_dict(), model.style_net.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total
 
     def inference(self, model):
         """

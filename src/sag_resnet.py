@@ -90,7 +90,7 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000, drop=0, sagnet=True, style_stage=3):
+    def __init__(self, block, layers, num_classes=7, drop=0, sagnet=True, style_stage=3):
         super().__init__()
         
         self.drop = drop

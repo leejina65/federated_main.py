@@ -225,10 +225,10 @@ if __name__ == '__main__':
         torch.cuda.set_device(args.gpu)
     device = 'cuda' if not args.gpu else 'cpu'
 
-    # BUILD MODEL
+    # BUILD MODEL not args.from_sketch
     if args.dataset == 'pacs':
         global_model= sag_resnet(depth=int(args.depth),
-                   pretrained=not args.from_sketch,
+                   pretrained=True,
                    num_classes=args.num_classes,
                    drop=args.drop,
                    sagnet=args.sagnet,
@@ -271,8 +271,11 @@ if __name__ == '__main__':
     print_every = 2
     val_loss_pre, counter = 0, 0
 
+
+
+
     for epoch in tqdm(range(args.epochs)):
-        local_weights, local_losses = [], []
+        local_weights,local_weight_style, local_losses = [], [], []
         local_losses_style, local_losses_adv = [], []
         acc_c = []
         print(f'\n | Global Training Round : {epoch+1} |\n')
@@ -286,7 +289,7 @@ if __name__ == '__main__':
                                       idxs=user_groups[idx],logger=logger,
                                       opti=copy.deepcopy(opti_dic), status = copy.deepcopy(status),
                                       flag='train')
-            w, loss,loss_style,loss_adv, acc_history = local_model.update_weights(
+            w, style_w, loss, loss_style,loss_adv, acc_history = local_model.update_weights(
                 model=copy.deepcopy(global_model), global_round=epoch)
             local_weights.append(copy.deepcopy(w))
 
@@ -295,13 +298,18 @@ if __name__ == '__main__':
             local_losses_adv.append(copy.deepcopy(loss_adv))
             acc_c.append(acc_history)
 
+            local_weight_style.append(style_w)
+
             print('='*50,"CLIENT:",idx,"IS DONE",'='*50)
 
         # update global weights
         global_weights = average_weights(local_weights)
+        global_weights_style = average_weights(local_weight_style)
 
         # update global weights
         global_model.load_state_dict(global_weights)
+        global_model.style_net.load_state_dict(global_weights_style)
+
 
         loss_avg = sum(local_losses) / len(local_losses)
         loss_avg_style = sum(local_losses_style) / len(local_losses_style)

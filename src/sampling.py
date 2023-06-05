@@ -30,18 +30,23 @@ def pacs_iid(dataset,trainclass_num, num_users, domain_set):
     #tempdomain for each class ==> split each class into same ratio
     #0~N-1, N~(N)+N2-1, N+N2~(N+N2)+N3-1
     #domain # == 4 (default)
+
     dict_users={}
+
+    '''
+    ########## equal 하게 나눌때 #####################
     num_items_list = [int(len(dataset[i].samples) / num_users) for i in range(domain_num)]
     num_items_min=min(num_items_list)
     print(num_items_min)
+    '''
     for domain_idx in range(domain_num):
         data=dataset[domain_idx-1].samples
         str=len(dataset[domain_idx-2].samples) if domain_idx!=0 else 0
         end=str+len(data)-1
         ###########################################
-        #num_items = int(len(data) / num_users)  # client당 가지는 해당 domain data#
+        num_items = int(len(data) / num_users)  # client당 가지는 해당 domain data#
         ###########################################
-        num_items=num_items_min
+        #num_items=num_items_min            #equal
         all_idxs = [i for i in range(str,end+1)] #0~N-1, N~(N)+N2-1, N+N2~(N+N2)+N3-1
 
         for i in range(num_users):  # users에게 data 나눠주기

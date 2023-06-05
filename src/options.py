@@ -13,9 +13,9 @@ def args_parser():
                         help="number of users: K")
     parser.add_argument('--frac', type=float, default=0.5,
                         help='the fraction of clients: C')
-    parser.add_argument('--local_ep', type=int, default=25,
+    parser.add_argument('--local_ep', type=int, default=10,
                         help="the number of local epochs: E")
-    parser.add_argument('--local_bs', type=int, default=16,
+    parser.add_argument('--local_bs', type=int, default=32,
                         help="local batch size: B") #FL=10 sagnet=32
     parser.add_argument('--lr', type=float, default=0.002, #0.01 ->0.001
                         help='learning rate') #sagnet=0.04
