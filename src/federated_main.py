@@ -277,31 +277,36 @@ if __name__ == '__main__':
     for epoch in tqdm(range(args.epochs)):
         local_weights,local_weight_style, local_losses = [], [], []
         local_losses_style, local_losses_adv = [], []
+        list_p_adv, list_p_style = [],[]
         acc_c = []
         print(f'\n | Global Training Round : {epoch+1} |\n')
+
+        #opti_dic = init_optimizer(global_model)
 
         global_model.train()
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
-
+        #c=copy.deepcopy(global_model)
         for idx in idxs_users:
             local_model = LocalUpdate(args=args, dataset_srcs=dataset_srcs,dataset_vals=dataset_vals,
                                       idxs=user_groups[idx],logger=logger,
-                                      opti=opti_dic, status = copy.deepcopy(status),
+                                      opti=copy.deepcopy(opti_dic), status = copy.deepcopy(status),
                                       flag='train')
 
-            w, style_w, loss, loss_style,loss_adv, acc_history = local_model.update_weights(
+            w, style_w,para_adv, para_style , loss, loss_style,loss_adv, acc_history = local_model.update_weights(
                 model=copy.deepcopy(global_model), global_round=epoch)
 
             local_weights.append(copy.deepcopy(w))
             local_weight_style.append(copy.deepcopy(style_w))
 
+            list_p_adv.append(para_adv)
+            list_p_style.append(para_style)
+
             local_losses.append(copy.deepcopy(loss))
             local_losses_style.append(copy.deepcopy(loss_style))
             local_losses_adv.append(copy.deepcopy(loss_adv))
             acc_c.append(acc_history)
-
-
+            #global_model.load_state_dict(global_weights)
 
             print('='*50,"CLIENT:",idx,"IS DONE",'='*50)
 
