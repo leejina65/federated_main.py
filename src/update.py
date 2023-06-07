@@ -143,7 +143,7 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
             time_net = time.time() - tic
 
             self.logger.add_scalar('loss', loss.item())
-            acc=compute_accuracy(y, label)
+            acc = compute_accuracy(y, label)
 
 
             ## Update status
@@ -163,6 +163,7 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
     def update_weights(self, model, global_round): #, step, loader_srcs):
         # Set mode to train model
         model.train()
+
         epoch_loss,epoch_loss_style,epoch_loss_adv = [],[],[]
         acc_total = []
 
@@ -170,11 +171,15 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
 
         for iter in range(self.args.local_ep):
             batch_loss,batch_loss_style,batch_loss_adv,acc_list = [],[],[],[]
+            preds, label = [], []
             for batch_idx, (images, labels) in enumerate(self.trainloader):
                 model.zero_grad()
                 loss_style,loss_adv,loss,y_ = self.idx_sagnet(model, iter, images,labels, flag=self.flag,optimizer=optimizer)
 
-                acc = compute_accuracy(y_.data.cpu().numpy(), labels.data.cpu().numpy())
+                # result
+                preds += [y_.data.cpu().numpy()]
+                label += [labels.data.cpu().numpy()]
+
 
 
                 if self.args.verbose and (batch_idx % 10 == 0):
@@ -189,18 +194,23 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                 batch_loss.append(loss.item())
                 batch_loss_style.append(loss_style.item())
                 batch_loss_adv.append(loss_adv.item())
-                acc_list.append(acc)
+
+            # Aggregate result
+            preds = np.concatenate(preds, axis=0)
+            label = np.concatenate(label, axis=0)
+            acc = compute_accuracy(preds, label)
+
 
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             epoch_loss_style.append(sum(batch_loss_style) / len(batch_loss_style))
             epoch_loss_adv.append(sum(batch_loss_adv) / len(batch_loss_adv))
-            acc_total.append(sum(acc_list)/len(acc_list))
+            #acc_total.append(sum(acc_list)/len(acc_list))
 
             print('\tloss: {:.6f}\tloss_style: {:.6f}\tloss_adv: {:.6f}\t'.format(sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv)))
-            print('\tacc: {:.6f}'.format(sum(acc_list)/len(acc_list)))
+            print('\tacc: {:.6f}'.format(acc))   #sum(acc_list)/len(acc_list)
 
 
-        return model.state_dict(), model.style_net.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total
+        return model.state_dict(), model.style_net.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc
 
     def inference(self, model):
         """

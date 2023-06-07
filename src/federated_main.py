@@ -228,7 +228,7 @@ if __name__ == '__main__':
     # BUILD MODEL not args.from_sketch
     if args.dataset == 'pacs':
         global_model= sag_resnet(depth=int(args.depth),
-                   pretrained=True,
+                   pretrained=not args.from_sketch,
                    num_classes=args.num_classes,
                    drop=args.drop,
                    sagnet=args.sagnet,
@@ -287,18 +287,21 @@ if __name__ == '__main__':
         for idx in idxs_users:
             local_model = LocalUpdate(args=args, dataset_srcs=dataset_srcs,dataset_vals=dataset_vals,
                                       idxs=user_groups[idx],logger=logger,
-                                      opti=copy.deepcopy(opti_dic), status = copy.deepcopy(status),
+                                      opti=opti_dic, status = copy.deepcopy(status),
                                       flag='train')
+
             w, style_w, loss, loss_style,loss_adv, acc_history = local_model.update_weights(
                 model=copy.deepcopy(global_model), global_round=epoch)
+
             local_weights.append(copy.deepcopy(w))
+            local_weight_style.append(copy.deepcopy(style_w))
 
             local_losses.append(copy.deepcopy(loss))
             local_losses_style.append(copy.deepcopy(loss_style))
             local_losses_adv.append(copy.deepcopy(loss_adv))
             acc_c.append(acc_history)
 
-            local_weight_style.append(style_w)
+
 
             print('='*50,"CLIENT:",idx,"IS DONE",'='*50)
 
