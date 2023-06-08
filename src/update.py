@@ -9,7 +9,7 @@ from utils_sag import *
 import options
 from options import args_parser
 from PIL import Image
-
+import cv2
 import time
 import numpy as np
 from torchvision import transforms
@@ -119,8 +119,6 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         # forward
         y, y_style = model(data)
 
-        acc = compute_accuracy(y, label)
-
         if self.args.sagnet and flag=='train':
             # learn style
             loss_style = self.criterion(y_style, label)
@@ -158,30 +156,29 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                 self.status['src']['l_s'].update(loss_style.item())
                 self.status['src']['l_adv'].update(loss_adv.item())
             self.status['src']['acc'].update(acc)
-            return loss_style,loss_adv,loss,y,acc
+            return loss_style,loss_adv,loss,y
         else:
-            return y ,acc
+            return y
 
     def update_weights(self, model, global_round): #, step, loader_srcs):
         # Set mode to train model
         model.train()
 
         epoch_loss,epoch_loss_style,epoch_loss_adv = [],[],[]
-        #acc_total = []
+        acc_total = []
 
         optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,momentum=0.5)
 
         for iter in range(self.args.local_ep):
             batch_loss,batch_loss_style,batch_loss_adv,acc_list = [],[],[],[]
-            acc_total = []
             preds, label = [], []
             for batch_idx, (images, labels) in enumerate(self.trainloader):
                 model.zero_grad()
-                loss_style,loss_adv,loss,y_,acc = self.idx_sagnet(model, iter, images,labels, flag=self.flag,optimizer=optimizer)
+                loss_style,loss_adv,loss,y_ = self.idx_sagnet(model, iter, images,labels, flag=self.flag,optimizer=optimizer)
 
-                # # result
-                # preds += [y_.data.cpu().numpy()]
-                # label += [labels.data.cpu().numpy()]
+                # result
+                preds += [y_.data.cpu().numpy()]
+                label += [labels.data.cpu().numpy()]
 
 
 
@@ -198,25 +195,22 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                 batch_loss_style.append(loss_style.item())
                 batch_loss_adv.append(loss_adv.item())
 
-                acc_list.append(acc)
-                #print(acc)
-
             # Aggregate result
-            # preds = np.concatenate(preds, axis=0)
-            # label = np.concatenate(label, axis=0)
-            # acc = compute_accuracy(preds, label)
+            preds = np.concatenate(preds, axis=0)
+            label = np.concatenate(label, axis=0)
+            acc = compute_accuracy(preds, label)
 
 
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             epoch_loss_style.append(sum(batch_loss_style) / len(batch_loss_style))
             epoch_loss_adv.append(sum(batch_loss_adv) / len(batch_loss_adv))
-            acc_total.append(sum(acc_list)/len(acc_list))
+            #acc_total.append(sum(acc_list)/len(acc_list))
 
             print('\tloss: {:.6f}\tloss_style: {:.6f}\tloss_adv: {:.6f}\t'.format(sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv)))
-            print('\tacc: {:.6f}'.format(acc_total[0]))   #sum(acc_list)/len(acc_list)
+            print('\tacc: {:.6f}'.format(acc))   #sum(acc_list)/len(acc_list)
 
 
-        return model.state_dict(), model.style_net.state_dict(),model.adv_params(),model.style_params() ,sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total[0]
+        return model.state_dict(), model.style_net.state_dict(), sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc
 
     def inference(self, model):
         """
@@ -224,24 +218,21 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         """
         model.eval()
         preds, labels = [], []
-        acc_list=[]
         preds_total,labels_total,acc_total= [], [],[]
         loss, total, correct = 0.0, 0.0, 0.0
 
         for batch_idx, (images, label) in enumerate(self.valloader):
-            y,acc = self.idx_sagnet(model, iter, images, label, flag=self.flag, optimizer='None')
+            y = self.idx_sagnet(model, iter, images, label, flag=self.flag, optimizer='None')
 
-            acc_list.append(acc)
-        acc_total.append(sum(acc_list)/len(acc_list))
-        #     # result
-        #     preds += [y.data.cpu().numpy()]
-        #     labels += [label.data.cpu().numpy()]
-        #     # Aggregate result
-        # preds = np.concatenate(preds, axis=0)
-        # labels = np.concatenate(labels, axis=0)
-        # acc = compute_accuracy(preds, labels)
+            # result
+            preds += [y.data.cpu().numpy()]
+            labels += [label.data.cpu().numpy()]
+            # Aggregate result
+        preds = np.concatenate(preds, axis=0)
+        labels = np.concatenate(labels, axis=0)
+        acc = compute_accuracy(preds, labels)
 
-        return acc_total
+        return acc
 
 
 def test_inference(args, model, test_dataset,scheduler, scheduler_style, scheduler_adv):

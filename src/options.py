@@ -7,11 +7,11 @@ def args_parser():
     parser = argparse.ArgumentParser()
 
     # federated arguments (Notation for the arguments followed from paper)
-    parser.add_argument('--epochs', type=int, default=5, #10->50
+    parser.add_argument('--epochs', type=int, default=1, #10->50
                         help="number of rounds of training")
     parser.add_argument('--num_users', type=int, default=10,
                         help="number of users: K")
-    parser.add_argument('--frac', type=float, default=0.6,
+    parser.add_argument('--frac', type=float, default=0.5,
                         help='the fraction of clients: C')
     parser.add_argument('--local_ep', type=int, default=10,
                         help="the number of local epochs: E")
@@ -58,7 +58,7 @@ def args_parser():
     parser.add_argument('--seed', type=int, default=1, help='random seed')
 
 
-    parser.add_argument('--dataset-dir', type=str, default='/home/yrjang/PycharmProjects/federated_main.py/dataset',
+    parser.add_argument('--dataset-dir', type=str, default='C:/Users/BamiDeep1/Desktop/FLEG0420/dataset',
                         help='Sagnet:: home directory to dataset')
     parser.add_argument('--dataset', type=str, default='pacs',
                         help="Sagnet::dataset name")
