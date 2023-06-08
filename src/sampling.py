@@ -74,6 +74,7 @@ def pacs_noniid(dataset,class_num,num_users):
     #     dict_users.setdefault(i,set()).add(tuple(user_idxs))
     #     all_idxs=list(set(all_idxs).difference(user_idxs))
     dict_users = {}
+    class_num = len(class_num)
     all_idxs , num_items = [None] * class_num , [None] * class_num
     choice_domain_list = []
     for i in range(num_users):  # 유저의 개수 만큼 랜덤으로 4개의 도메인 중 2개를 뽑은 후 리스트로 저장
@@ -85,6 +86,7 @@ def pacs_noniid(dataset,class_num,num_users):
 
     # 각 도메인마다 선택한 client의 개수를 센다
     choice_domain_num = collections.Counter(np.concatenate(choice_domain_list).tolist())
+
     for idx in range(class_num):
         data = dataset[idx - 1].samples
         str = len(dataset[idx - 2].samples) if idx != 0 else 0

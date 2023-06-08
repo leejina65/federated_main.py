@@ -90,7 +90,7 @@ def init_loader(): #train_dataset, val_dataset,test_dataset):
             user_groups = pacs_iid(dataset_srcs, trClssnum, args.num_users,domain_set = 0)
         else:
             # Sample Non-IID user data from Mnist
-            user_groups = pacs_noniid(dataset_srcs, args.num_users)
+            user_groups = pacs_noniid(dataset_srcs,trClssnum ,args.num_users)
 
         return dataset_srcs, dataset_vals,dataset_tgts, user_groups
 
@@ -335,16 +335,31 @@ if __name__ == '__main__':
                                   logger=logger,opti=copy.deepcopy(opti_dic), status = copy.deepcopy(status),
                                   flag='val')
         acc = local_model.inference(model=global_model) #각 val domain acc
-        list_acc.append(acc)
-        train_accuracy=list_acc
-        acc_g.append(acc_c)
+
+        val_acc_list.append(acc) ##################################################### 0608
+
 
         # print global training loss after every 'i' rounds1,1
         #if (epoch+1) % print_every == 0:
         print(f' \nAvg Training Stats after {epoch+1} global rounds:')
         print(f'Training Loss : {np.mean(np.array(train_loss))}')
-        print('Train Accuracy: {:.2f}% \n'.format(100*train_accuracy[-1])) #art,sket,photo
+        print('Train Accuracy: {:.2f}% \n'.format(100*acc[0])) #art,sket,photo
 
+    ##################################################### 0608
+    # val_acc save
+    file_name = '../save/val_acc/{}_{}_{}_C[{}]_iid[{}]_E[{}]_B[{}].npy'. \
+        format(args.dataset, args.model, args.epochs, args.frac, args.iid,
+               args.local_ep, args.local_bs)
+    np.save(file_name,val_acc_list)
+
+    # train_loss
+    file_name = '../save/loss/{}_{}_{}_C[{}]_iid[{}]_E[{}]_B[{}].npy'. \
+        format(args.dataset, args.model, args.epochs, args.frac, args.iid,
+               args.local_ep, args.local_bs)
+    np.save(file_name, train_loss)
+
+
+    ##############################Test#########################################################33
 
     # Test inference after completion of training
     opti_test = copy.deepcopy(opti_dic)
@@ -352,7 +367,7 @@ if __name__ == '__main__':
                                          ,opti_test['scheduler'], opti_test['scheduler_style'], opti_test['scheduler_adv'])
 
     print(f' \n Results after {args.epochs} global rounds of training:')
-    print("|---- Avg Train Accuracy: {:.2f}%".format(100*train_accuracy[-1]))
+    print("|---- Avg Train Accuracy: {:.2f}%".format(100*acc[0]))
     print("|---- Test Accuracy: {:.2f}%".format(100*test_acc))
 
     # Saving the objects train_loss and train_accuracy:

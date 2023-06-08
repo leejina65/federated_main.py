@@ -167,12 +167,13 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
         model.train()
 
         epoch_loss,epoch_loss_style,epoch_loss_adv = [],[],[]
-        acc_total = []
+        #acc_total = []
 
         optimizer = torch.optim.SGD(model.parameters(), lr=self.args.lr,momentum=0.5)
 
         for iter in range(self.args.local_ep):
             batch_loss,batch_loss_style,batch_loss_adv,acc_list = [],[],[],[]
+            acc_total = []
             preds, label = [], []
             for batch_idx, (images, labels) in enumerate(self.trainloader):
                 model.zero_grad()
@@ -198,6 +199,7 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
                 batch_loss_adv.append(loss_adv.item())
 
                 acc_list.append(acc)
+                #print(acc)
 
             # Aggregate result
             # preds = np.concatenate(preds, axis=0)
@@ -211,10 +213,10 @@ class LocalUpdate(object): #idxs=user_groups[idx]=clinet #clinet model training
             acc_total.append(sum(acc_list)/len(acc_list))
 
             print('\tloss: {:.6f}\tloss_style: {:.6f}\tloss_adv: {:.6f}\t'.format(sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv)))
-            print('\tacc: {:.6f}'.format(acc))   #sum(acc_list)/len(acc_list)
+            print('\tacc: {:.6f}'.format(acc_total[0]))   #sum(acc_list)/len(acc_list)
 
 
-        return model.state_dict(), model.style_net.state_dict(),model.adv_params(),model.style_params() ,sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc
+        return model.state_dict(), model.style_net.state_dict(),model.adv_params(),model.style_params() ,sum(epoch_loss) / len(epoch_loss),sum(epoch_loss_style) / len(epoch_loss_style),sum(epoch_loss_adv) / len(epoch_loss_adv),acc_total[0]
 
     def inference(self, model):
         """
